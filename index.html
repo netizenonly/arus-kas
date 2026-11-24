@@ -1,0 +1,2057 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aplikasi Pencatatan Pembayaran & Pembukuan</title>
+    <!-- Library SheetJS (XLSX) untuk export Excel murni (.xlsx) -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+    <!-- Library Supabase JS Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --bg-surface: #ffffff;
+            --text-primary: #0f172a;
+            --text-secondary: #334155;
+            --text-muted: #64748b;
+            --border-subtle: #e2e8f0;
+            --accent-indigo: #4f46e5;
+            --accent-indigo-dark: #4338ca;
+            --accent-emerald: #10b981;
+            --accent-emerald-dark: #059669;
+            --accent-amber: #f59e0b;
+            --accent-amber-dark: #d97706;
+            --accent-rose: #f43f5e;
+            --accent-rose-dark: #e11d48;
+            --accent-cyan: #06b6d4;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: #dbeafe;
+            background-image:
+                linear-gradient(145deg, rgba(15, 23, 42, 0.58) 0%, rgba(30, 41, 59, 0.48) 50%, rgba(15, 118, 110, 0.45) 100%),
+                url('https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1400&q=80');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            min-height: 100vh;
+            color: var(--text-primary);
+            padding: 10px;
+            font-size: 13px;
+        }
+
+        body.dashboard-locked {
+            height: 100dvh;
+            overflow: hidden;
+            padding: 10px 12px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .container {
+            max-width: 760px;
+            width: 100%;
+            margin: 0 auto;
+        }
+
+        body.dashboard-locked .container {
+            max-width: 640px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        #view-dashboard.active {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 10px;
+            min-height: 0;
+        }
+
+        .hero-header {
+            background:
+                linear-gradient(135deg, rgba(30, 27, 75, 0.86) 0%, rgba(67, 56, 202, 0.82) 55%, rgba(14, 116, 144, 0.84) 100%),
+                url('https://images.unsplash.com/photo-1450101499163-c8848c66ca85?auto=format&fit=crop&w=1000&q=80');
+            background-size: cover;
+            background-position: center;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            color: #ffffff;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            border-radius: 18px;
+            padding: 14px 18px;
+            box-shadow: 0 14px 28px -10px rgba(15, 23, 42, 0.45);
+            position: relative;
+            overflow: hidden;
+            flex-shrink: 0;
+            text-align: center;
+        }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(255, 255, 255, 0.18);
+            backdrop-filter: blur(6px);
+            padding: 3px 10px;
+            border-radius: 999px;
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+            margin-bottom: 5px;
+            max-width: 100%;
+        }
+
+        #dbStatusText {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .db-status {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #fbbf24;
+            flex-shrink: 0;
+        }
+
+        .db-status.connected {
+            background-color: #34d399;
+            box-shadow: 0 0 8px #34d399;
+        }
+
+        .db-status.error {
+            background-color: #f87171;
+        }
+
+        .hero-title {
+            font-size: 1.2rem;
+            font-weight: 800;
+            letter-spacing: -0.3px;
+            margin-bottom: 2px;
+            text-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+        }
+
+        .hero-subtitle {
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.92);
+            line-height: 1.3;
+        }
+
+        .bento-grid {
+            flex: 1;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            grid-template-rows: repeat(2, 1fr);
+            gap: 10px;
+            min-height: 0;
+        }
+
+        .menu-tile {
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.65);
+            border-radius: 18px;
+            padding: 12px 10px;
+            box-shadow: 0 10px 24px -6px rgba(15, 23, 42, 0.28);
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            gap: 8px;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+            position: relative;
+            overflow: hidden;
+            min-height: 0;
+            background-size: cover;
+            background-position: center;
+        }
+
+        .menu-tile::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: var(--tile-accent, var(--accent-indigo));
+            z-index: 2;
+        }
+
+        .menu-tile:hover {
+            transform: translateY(-2px);
+            border-color: #ffffff;
+            box-shadow: 0 16px 28px -8px rgba(15, 23, 42, 0.38);
+        }
+
+        .menu-icon {
+            font-size: 1.75rem;
+            background: rgba(255, 255, 255, 0.92);
+            color: var(--tile-accent, var(--accent-indigo));
+            width: 54px;
+            height: 54px;
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto;
+            box-shadow: 0 8px 16px -4px rgba(15, 23, 42, 0.18);
+            flex-shrink: 0;
+            position: relative;
+            z-index: 1;
+        }
+
+        .tile-content {
+            position: relative;
+            z-index: 1;
+        }
+
+        .tile-master {
+            --tile-accent: #0d9488;
+            background-image:
+                linear-gradient(165deg, rgba(255, 255, 255, 0.78) 0%, rgba(204, 251, 241, 0.72) 100%),
+                url('https://images.unsplash.com/photo-1521791136064-7986c2920216?auto=format&fit=crop&w=700&q=80');
+        }
+
+        .tile-bayar {
+            --tile-accent: #4f46e5;
+            background-image:
+                linear-gradient(165deg, rgba(255, 255, 255, 0.78) 0%, rgba(224, 231, 255, 0.72) 100%),
+                url('https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=700&q=80');
+        }
+
+        .tile-riwayat {
+            --tile-accent: #d97706;
+            background-image:
+                linear-gradient(165deg, rgba(255, 255, 255, 0.78) 0%, rgba(254, 243, 199, 0.74) 100%),
+                url('https://images.unsplash.com/photo-1506784983877-45594efa4cbe?auto=format&fit=crop&w=700&q=80');
+        }
+
+        .tile-buku {
+            --tile-accent: #0284c7;
+            background-image:
+                linear-gradient(165deg, rgba(255, 255, 255, 0.78) 0%, rgba(224, 242, 254, 0.74) 100%),
+                url('https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=700&q=80');
+        }
+
+        .menu-title {
+            font-size: 0.95rem;
+            font-weight: 800;
+            color: #0f172a;
+            margin-bottom: 2px;
+        }
+
+        .menu-desc {
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: #334155;
+            line-height: 1.25;
+            max-width: 210px;
+            margin: 0 auto;
+        }
+
+        .section-view {
+            display: none;
+        }
+
+        .section-view.active {
+            display: block;
+            animation: fadeIn 0.2s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.85);
+            border-radius: 14px;
+            padding: 12px 14px;
+            box-shadow: 0 8px 20px -8px rgba(15, 23, 42, 0.22);
+            margin-bottom: 10px;
+        }
+
+        h2 {
+            font-size: 0.98rem;
+            margin-bottom: 10px;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 800;
+        }
+
+        .sub-nav-tabs {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+
+        .sub-tab-btn {
+            background: rgba(255, 255, 255, 0.85);
+            color: var(--text-secondary);
+            border: 1px solid rgba(255, 255, 255, 0.9);
+            border-radius: 10px;
+            padding: 7px 12px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 3px 8px rgba(15, 23, 42, 0.12);
+        }
+
+        .sub-tab-btn.active {
+            background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+            color: #ffffff;
+            border-color: transparent;
+            box-shadow: 0 5px 12px -4px rgba(2, 132, 199, 0.45);
+        }
+
+        .form-group {
+            margin-bottom: 8px;
+            position: relative;
+        }
+
+        .filter-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .filter-grid .form-group {
+            margin-bottom: 0;
+        }
+
+        @media (max-width: 480px) {
+            .filter-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        label {
+            display: block;
+            font-size: 0.76rem;
+            font-weight: 700;
+            margin-bottom: 4px;
+            color: var(--text-secondary);
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 8px 11px;
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            font-size: 0.86rem;
+            outline: none;
+            transition: all 0.2s;
+            background-color: #ffffff;
+            color: var(--text-primary);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 64px;
+            font-family: inherit;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            border-color: var(--accent-indigo);
+            box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.16);
+        }
+
+        /* Autocomplete Saran Nama Pelanggan dari Master */
+        .autocomplete-wrapper {
+            position: relative;
+        }
+
+        .suggestion-box {
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            right: 0;
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            box-shadow: 0 12px 24px -6px rgba(15, 23, 42, 0.22);
+            max-height: 190px;
+            overflow-y: auto;
+            z-index: 50;
+            display: none;
+        }
+
+        .suggestion-box.show {
+            display: block;
+        }
+
+        .suggestion-item {
+            padding: 8px 11px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #f1f5f9;
+            font-size: 0.82rem;
+            transition: background 0.15s;
+        }
+
+        .suggestion-item:last-child {
+            border-bottom: none;
+        }
+
+        .suggestion-item:hover {
+            background-color: #eef2ff;
+        }
+
+        .suggestion-tagihan {
+            font-size: 0.72rem;
+            color: #059669;
+            font-weight: 700;
+            background: #ecfdf5;
+            padding: 2px 6px;
+            border-radius: 6px;
+        }
+
+        .suggestion-empty {
+            padding: 9px 11px;
+            font-size: 0.78rem;
+            color: #e11d48;
+            font-weight: 600;
+            background: #fff1f2;
+        }
+
+        .master-hint {
+            font-size: 0.7rem;
+            margin-top: 3px;
+            font-weight: 600;
+            display: block;
+        }
+
+        .master-hint.valid {
+            color: #059669;
+        }
+
+        .master-hint.invalid {
+            color: #e11d48;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 9px 14px;
+            background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+            color: #ffffff;
+            border: none;
+            border-radius: 10px;
+            font-size: 0.86rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 0.15s ease, box-shadow 0.2s ease, opacity 0.2s;
+            margin-top: 2px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            box-shadow: 0 5px 12px -4px rgba(79, 70, 229, 0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 16px -6px rgba(79, 70, 229, 0.48);
+        }
+
+        .btn-master {
+            background: linear-gradient(135deg, #0d9488 0%, #0f766e 100%);
+            box-shadow: 0 5px 12px -4px rgba(13, 148, 136, 0.4);
+        }
+
+        .btn-bulk {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            box-shadow: 0 5px 12px -4px rgba(217, 119, 6, 0.4);
+        }
+
+        .btn-export {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            padding: 6px 10px;
+            font-size: 0.76rem;
+            width: auto;
+            margin-top: 0;
+            white-space: nowrap;
+            box-shadow: 0 4px 10px -4px rgba(5, 150, 105, 0.38);
+        }
+
+        .rekap-header-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+        }
+
+        .rekap-header-bar h2 {
+            margin-bottom: 0;
+        }
+
+        .table-fit {
+            width: 100%;
+            border-radius: 10px;
+            border: 1px solid var(--border-subtle);
+            overflow: hidden;
+            background-color: #ffffff;
+        }
+
+        table {
+            width: 100%;
+            table-layout: fixed;
+            border-collapse: collapse;
+            background-color: #ffffff;
+            text-align: left;
+        }
+
+        th, td {
+            padding: 5px 4px;
+            font-size: 0.68rem;
+            line-height: 1.25;
+            border-bottom: 1px solid #f1f5f9;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+
+        th {
+            background-color: #f1f5f9;
+            color: #334155;
+            font-weight: 800;
+            text-transform: uppercase;
+            font-size: 0.59rem;
+            letter-spacing: 0.2px;
+            border-bottom: 1.5px solid #cbd5e1;
+        }
+
+        tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        tbody tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+
+        tbody tr:hover {
+            background-color: #eef2ff;
+        }
+
+        .status-pill {
+            display: inline-block;
+            padding: 2px 4px;
+            border-radius: 6px;
+            font-size: 0.62rem;
+            font-weight: 700;
+            line-height: 1.15;
+        }
+
+        .status-normal {
+            background-color: #d1fae5;
+            color: #065f46;
+        }
+
+        .status-kendala {
+            background-color: #ffe4e6;
+            color: #9f1239;
+        }
+
+        .op-badge {
+            display: inline-block;
+            padding: 2px 5px;
+            border-radius: 5px;
+            font-size: 0.62rem;
+            font-weight: 700;
+            background-color: #e0e7ff;
+            color: #3730a3;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: var(--text-muted);
+            padding: 14px 8px;
+            font-size: 0.76rem;
+        }
+
+        .summary-card {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(135deg, rgba(30, 27, 75, 0.94) 0%, rgba(67, 56, 202, 0.92) 60%, rgba(2, 132, 199, 0.92) 100%);
+            backdrop-filter: blur(10px);
+            color: #ffffff;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            padding: 11px 14px;
+            border-radius: 12px;
+            margin-bottom: 10px;
+            box-shadow: 0 8px 18px -8px rgba(15, 23, 42, 0.4);
+        }
+
+        .summary-title {
+            font-size: 0.7rem;
+            color: rgba(255, 255, 255, 0.88);
+            font-weight: 800;
+            letter-spacing: 0.4px;
+        }
+
+        .summary-value {
+            font-size: 1.05rem;
+            font-weight: 800;
+            color: #ffffff;
+        }
+
+        .btn-action-delete {
+            background-color: #ffe4e6;
+            color: #e11d48;
+            border: none;
+            border-radius: 7px;
+            width: 24px;
+            height: 24px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.15s;
+            font-size: 0.75rem;
+        }
+
+        .btn-action-delete:hover {
+            background-color: #fecdd3;
+            transform: scale(1.05);
+        }
+
+        .table-utama th,
+        .table-utama td {
+            padding: 4px 1.5px;
+            font-size: 0.56rem;
+            text-align: center;
+        }
+
+        .table-utama th:first-child,
+        .table-utama td:first-child {
+            text-align: left;
+            padding-left: 4px;
+        }
+
+        .table-utama .status-pill {
+            padding: 1.5px 2px;
+            font-size: 0.52rem;
+            border-radius: 4px;
+        }
+
+        @media (max-height: 600px) {
+            .hero-header { padding: 10px 14px; }
+            .hero-subtitle { display: none; }
+            .menu-icon { width: 44px; height: 44px; font-size: 1.4rem; }
+            .menu-desc { display: none; }
+        }
+    </style>
+</head>
+<body class="dashboard-locked">
+
+    <div class="container">
+        <datalist id="pelangganDatalist"></datalist>
+
+        <!-- DASHBOARD UTAMA -->
+        <div id="view-dashboard" class="section-view active">
+            <div class="hero-header">
+                <div class="hero-badge">
+                    <span class="db-status" id="dbStatusDot"></span>
+                    <span id="dbStatusText">MENGHUBUNGKAN KE ARUS-KAS...</span>
+                </div>
+                <div class="hero-title">Pusat Kontrol Pembayaran</div>
+                <div class="hero-subtitle">Kelola pelanggan, catat setoran bulanan, cek status lunas, dan unduh laporan.</div>
+            </div>
+
+            <div class="bento-grid">
+                <button class="menu-tile tile-master" onclick="openMenu('view-master')">
+                    <div class="menu-icon">👥</div>
+                    <div class="tile-content">
+                        <div class="menu-title">Master Pelanggan</div>
+                        <div class="menu-desc">Tambah pelanggan & atur tagihan</div>
+                    </div>
+                </button>
+
+                <button class="menu-tile tile-bayar" onclick="openMenu('view-pembayaran')">
+                    <div class="menu-icon">💳</div>
+                    <div class="tile-content">
+                        <div class="menu-title">Input Pembayaran</div>
+                        <div class="menu-desc">Catat setoran bulanan & operator</div>
+                    </div>
+                </button>
+
+                <button class="menu-tile tile-riwayat" onclick="openMenu('view-riwayat')">
+                    <div class="menu-icon">📜</div>
+                    <div class="tile-content">
+                        <div class="menu-title">Cek Riwayat</div>
+                        <div class="menu-desc">Status lunas 12 bulan & log aktivitas</div>
+                    </div>
+                </button>
+
+                <button class="menu-tile tile-buku" onclick="openMenu('view-pembukuan')">
+                    <div class="menu-icon">📊</div>
+                    <div class="tile-content">
+                        <div class="menu-title">Pembukuan & Excel</div>
+                        <div class="menu-desc">Tabel utama, filter bulan & export Excel</div>
+                    </div>
+                </button>
+            </div>
+        </div>
+
+        <!-- 1. MENU MASTER PELANGGAN -->
+        <div id="view-master" class="section-view">
+            <div class="card">
+                <h2>👥 Tambah Pelanggan Satuan</h2>
+                <form id="masterForm">
+                    <div class="form-group">
+                        <label for="masterNama">Nama Pelanggan</label>
+                        <input type="text" id="masterNama" placeholder="Masukkan nama pelanggan" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="masterTagihan">Jumlah Tagihan Standar (Rp)</label>
+                        <input type="number" id="masterTagihan" placeholder="Contoh: 150000" required>
+                    </div>
+                    <button type="submit" id="btnSubmitMaster" class="btn btn-master">
+                        <span>➕</span> Tambah Pelanggan
+                    </button>
+                </form>
+            </div>
+
+            <div class="card">
+                <h2>📂 Tambah Banyak (Copy-Paste / Massal)</h2>
+                <form id="bulkMasterForm">
+                    <div class="form-group">
+                        <label for="bulkMasterText">Format per baris: <strong>Nama, Tagihan</strong></label>
+                        <textarea id="bulkMasterText" placeholder="Contoh:&#10;Budi Santoso, 150000&#10;Siti Aminah, 120000" required></textarea>
+                    </div>
+                    <button type="submit" id="btnSubmitBulk" class="btn btn-bulk">
+                        <span>📥</span> Proses Tambah Banyak Data
+                    </button>
+                </form>
+            </div>
+
+            <div class="card">
+                <h2>📋 Daftar Pelanggan & Tagihan</h2>
+                <div class="form-group">
+                    <input type="text" id="searchMasterInput" placeholder="🔍 Cari nama pelanggan..." oninput="filterMasterTable()">
+                </div>
+                <div class="table-fit">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 48%;">Nama</th>
+                                <th style="width: 34%;">Tagihan</th>
+                                <th style="width: 18%; text-align: center;">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="masterTableBody">
+                            <tr>
+                                <td colspan="3" class="empty-state">Memuat data dari Supabase...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. MENU PEMBAYARAN -->
+        <div id="view-pembayaran" class="section-view">
+            <div class="card">
+                <h2>💳 Input Pembayaran</h2>
+                <form id="paymentForm">
+                    <div class="form-group">
+                        <label for="operatorInput">Operator *</label>
+                        <select id="operatorInput" required onchange="saveOperatorName(this.value)">
+                            <option value="">-- Pilih Operator --</option>
+                            <option value="Amar">Amar</option>
+                            <option value="Kori">Kori</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group autocomplete-wrapper">
+                        <label for="nama">Nama Pelanggan (Wajib Sesuai Master) *</label>
+                        <input
+                            type="text"
+                            id="nama"
+                            autocomplete="off"
+                            placeholder="Ketik atau pilih nama dari master pelanggan..."
+                            required
+                        >
+                        <div id="pelangganSuggestions" class="suggestion-box"></div>
+                        <small id="masterStatusHint" class="master-hint"></small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="bulan">Tagihan Bulan *</label>
+                        <select id="bulan" required></select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="jumlah">Jumlah Pembayaran (Rp) *</label>
+                        <input type="number" id="jumlah" min="1" placeholder="Contoh: 150000" required>
+                    </div>
+
+                    <button type="submit" id="btnSubmitPayment" class="btn">
+                        <span>💾</span> Simpan Pembayaran
+                    </button>
+                </form>
+            </div>
+
+            <div class="card">
+                <h2>📋 Daftar Catatan Pembayaran</h2>
+                <div class="table-fit">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 24%;">Nama</th>
+                                <th style="width: 22%;">Bulan</th>
+                                <th style="width: 22%;">Jumlah</th>
+                                <th style="width: 18%;">Operator</th>
+                                <th style="width: 14%; text-align: center;">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="paymentTableBody">
+                            <tr>
+                                <td colspan="5" class="empty-state">Memuat data dari Supabase...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. MENU CEK RIWAYAT -->
+        <div id="view-riwayat" class="section-view">
+            <div class="card">
+                <h2>📜 Cek Riwayat Pembayaran Pelanggan</h2>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label for="searchRiwayatNama">Pilih / Ketik Nama Pelanggan</label>
+                    <input type="text" id="searchRiwayatNama" list="pelangganDatalist" placeholder="Ketik nama pelanggan..." oninput="handleSearchRiwayat()">
+                </div>
+            </div>
+
+            <div class="card" id="hasilRiwayatCard" style="display: none;">
+                <h2 id="judulRiwayatPelanggan">Riwayat Pelanggan</h2>
+                <div class="table-fit">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 38%;">Bulan</th>
+                                <th style="width: 32%;">Jumlah</th>
+                                <th style="width: 30%;">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="riwayatBulanTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>🕵️ Log Aktivitas (Input & Hapus)</h2>
+                <div class="table-fit">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 25%;">Waktu</th>
+                                <th style="width: 45%;">Aktivitas</th>
+                                <th style="width: 30%;">Perangkat</th>
+                            </tr>
+                        </thead>
+                        <tbody id="activityLogTableBody">
+                            <tr>
+                                <td colspan="3" class="empty-state">Belum ada log input/hapus.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. MENU PEMBUKUAN LENGKAP -->
+        <div id="view-pembukuan" class="section-view">
+            <div class="sub-nav-tabs">
+                <button type="button" id="tabBukuRekap" class="sub-tab-btn active" onclick="switchBukuTab('rekap')">📊 Rekapitulasi Bulanan</button>
+                <button type="button" id="tabBukuUtama" class="sub-tab-btn" onclick="switchBukuTab('utama')">📋 Tabel Utama</button>
+            </div>
+
+            <!-- SUB-MENU A: REKAPITULASI BULANAN -->
+            <div id="buku-panel-rekap">
+                <div class="summary-card">
+                    <div>
+                        <div class="summary-title">TOTAL KAS PEMBUKUAN</div>
+                        <div style="font-size: 0.7rem; color: rgba(255, 255, 255, 0.88); margin-top: 1px;" id="bukuSubTitle">Akumulasi seluruh transaksi masuk</div>
+                    </div>
+                    <span class="summary-value" id="bukuTotalKas">Rp 0</span>
+                </div>
+
+                <div class="card">
+                    <div class="rekap-header-bar">
+                        <h2>📊 Rekapitulasi Pembukuan</h2>
+                        <button type="button" class="btn btn-export" onclick="exportPembukuanExcel()">
+                            <span>📥</span> Export Excel
+                        </button>
+                    </div>
+
+                    <div class="filter-grid">
+                        <div class="form-group">
+                            <label for="filterBulanPembukuan">Filter Berdasarkan Bulan</label>
+                            <select id="filterBulanPembukuan" onchange="renderPembukuan()"></select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="filterOperatorPembukuan">Filter Berdasarkan Operator</label>
+                            <select id="filterOperatorPembukuan" onchange="renderPembukuan()">
+                                <option value="ALL">Semua Operator</option>
+                                <option value="Amar">Amar</option>
+                                <option value="Kori">Kori</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="table-fit">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style="width: 19%;">Tgl</th>
+                                    <th style="width: 24%;">Nama</th>
+                                    <th style="width: 20%;">Bulan</th>
+                                    <th style="width: 16%;">Operator</th>
+                                    <th style="width: 21%;">Jumlah</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bukuTableBody">
+                                <tr>
+                                    <td colspan="5" class="empty-state">Memuat data pembukuan...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SUB-MENU B: TABEL UTAMA -->
+            <div id="buku-panel-utama" style="display: none;">
+                <div class="card">
+                    <div class="rekap-header-bar">
+                        <h2>📋 Tabel Utama</h2>
+                        <button type="button" class="btn btn-export" onclick="exportTabelUtamaExcel()">
+                            <span>📥</span> Export Tabel Utama
+                        </button>
+                    </div>
+                    <div class="form-group">
+                        <input type="text" id="searchTabelUtamaInput" placeholder="🔍 Cari nama di tabel utama..." oninput="renderTabelUtama()">
+                    </div>
+                    <div class="table-fit">
+                        <table class="table-utama">
+                            <thead>
+                                <tr id="tabelUtamaHeadRow"></tr>
+                            </thead>
+                            <tbody id="tabelUtamaBody">
+                                <tr>
+                                    <td colspan="14" class="empty-state">Memuat tabel utama...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // =====================================================================
+        // KONFIGURASI SUPABASE (PROJECT: arus-kas)
+        // =====================================================================
+        const SUPABASE_URL = 'https://kvecrcimargukfixknpq.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt2ZWNyY2ltYXJndWtmaXhrbnBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTU0MDQxMTgsImV4cCI6MjExMDk4MDExOH0.7EC80F-lMmI_4fNOusn6j9GYqWfFikT1A7yrl4c1eu4';
+
+        const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        const DAFTAR_OPERATOR = ['Amar', 'Kori'];
+        const TAHUN_SEKARANG = new Date().getFullYear();
+        const NAMA_BULAN_MURNI = [
+            "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+            "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+        ];
+        const BULAN_SINGKAT = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+        const BULAN_DENGAN_TAHUN = NAMA_BULAN_MURNI.map(b => `${b} ${TAHUN_SEKARANG}`);
+
+        // State Lokal (disinkronkan dengan Supabase)
+        let masterPelanggan = []; // { id, nama, tagihan }
+        let dataPembayaran = [];  // { id, tanggal, nama, bulan, jumlah, operator }
+        let activityLogs = [];    // { id, waktu, aktivitas, perangkat }
+        let pembukuanUnlocked = false;
+        let isHandlingPopState = false;
+
+        // Elemen UI
+        const dbStatusDot = document.getElementById('dbStatusDot');
+        const dbStatusText = document.getElementById('dbStatusText');
+        const masterForm = document.getElementById('masterForm');
+        const bulkMasterForm = document.getElementById('bulkMasterForm');
+        const masterNamaInput = document.getElementById('masterNama');
+        const masterTagihanInput = document.getElementById('masterTagihan');
+        const masterTableBody = document.getElementById('masterTableBody');
+        const pelangganDatalist = document.getElementById('pelangganDatalist');
+
+        const form = document.getElementById('paymentForm');
+        const operatorInput = document.getElementById('operatorInput');
+        const namaBayarInput = document.getElementById('nama');
+        const pelangganSuggestions = document.getElementById('pelangganSuggestions');
+        const masterStatusHint = document.getElementById('masterStatusHint');
+        const jumlahBayarInput = document.getElementById('jumlah');
+        const bulanSelectInput = document.getElementById('bulan');
+        const tableBody = document.getElementById('paymentTableBody');
+
+        // --- OPERATOR STANDBY DI PILIHAN TERAKHIR ---
+        function normalizeOperatorName(op) {
+            if (!op) return '';
+            const trimmed = String(op).trim();
+            const found = DAFTAR_OPERATOR.find(item => item.toLowerCase() === trimmed.toLowerCase());
+            return found || trimmed;
+        }
+
+        function loadSavedOperator() {
+            try {
+                const savedOp = localStorage.getItem('last_operator_name_v1');
+                if (savedOp && operatorInput) {
+                    const normalized = normalizeOperatorName(savedOp);
+                    if (DAFTAR_OPERATOR.includes(normalized)) {
+                        operatorInput.value = normalized;
+                    }
+                }
+            } catch (e) {}
+        }
+
+        function saveOperatorName(name) {
+            try {
+                const normalized = normalizeOperatorName(name);
+                if (DAFTAR_OPERATOR.includes(normalized)) {
+                    localStorage.setItem('last_operator_name_v1', normalized);
+                }
+            } catch (e) {}
+        }
+
+        // --- DETEKSI PERANGKAT & LOG AKTIVITAS (HANYA INPUT & HAPUS) ---
+        function getDeviceInfo() {
+            const ua = navigator.userAgent || '';
+            let os = 'Lainnya';
+            if (/android/i.test(ua)) {
+                const match = ua.match(/Android\s+([\d.]+)/i);
+                os = match ? `Android ${match[1]}` : 'Android';
+            } else if (/iphone|ipad|ipod/i.test(ua)) {
+                const match = ua.match(/OS\s+([\d_]+)/i);
+                os = match ? `iOS ${match[1].replace(/_/g, '.')}` : 'iOS';
+            } else if (/windows/i.test(ua)) {
+                os = 'Windows';
+            } else if (/macintosh|mac os x/i.test(ua)) {
+                os = 'macOS';
+            } else if (/linux/i.test(ua)) {
+                os = 'Linux';
+            }
+
+            let browser = 'Browser';
+            if (/edg/i.test(ua)) browser = 'Edge';
+            else if (/opr|opera/i.test(ua)) browser = 'Opera';
+            else if (/samsungbrowser/i.test(ua)) browser = 'Samsung';
+            else if (/chrome|crios/i.test(ua)) browser = 'Chrome';
+            else if (/firefox|fxios/i.test(ua)) browser = 'Firefox';
+            else if (/safari/i.test(ua)) browser = 'Safari';
+
+            const formFactor = /mobile|android|iphone|ipod/i.test(ua)
+                ? 'HP'
+                : (/tablet|ipad/i.test(ua) ? 'Tablet' : 'PC');
+
+            return `${formFactor} • ${os} (${browser})`;
+        }
+
+        function formatWaktuSekarang() {
+            const now = new Date();
+            const dd = String(now.getDate()).padStart(2, '0');
+            const mm = String(now.getMonth() + 1).padStart(2, '0');
+            const yyyy = now.getFullYear();
+            const hh = String(now.getHours()).padStart(2, '0');
+            const min = String(now.getMinutes()).padStart(2, '0');
+            const ss = String(now.getSeconds()).padStart(2, '0');
+            return `${dd}/${mm}/${yyyy} ${hh}:${min}:${ss}`;
+        }
+
+        function loadLocalLogs() {
+            try {
+                const raw = localStorage.getItem('web_activity_logs_v2');
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    if (Array.isArray(parsed)) {
+                        activityLogs = parsed.filter(l => {
+                            const act = (l.aktivitas || '').toLowerCase();
+                            return act.includes('input') || act.includes('tambah') || act.includes('hapus');
+                        });
+                    }
+                }
+            } catch (e) {}
+        }
+
+        function saveLocalLogs() {
+            try {
+                localStorage.setItem('web_activity_logs_v2', JSON.stringify(activityLogs.slice(0, 100)));
+            } catch (e) {}
+        }
+
+        async function recordInputOrDeleteActivity(aktivitas) {
+            const entry = {
+                waktu: formatWaktuSekarang(),
+                aktivitas,
+                perangkat: getDeviceInfo()
+            };
+            activityLogs.unshift(entry);
+            if (activityLogs.length > 100) activityLogs.length = 100;
+            saveLocalLogs();
+            renderActivityLogs();
+
+            try {
+                await db.from('activity_logs').insert([entry]);
+            } catch (err) {}
+        }
+
+        function renderActivityLogs() {
+            const tbody = document.getElementById('activityLogTableBody');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+
+            if (!activityLogs.length) {
+                tbody.innerHTML = '<tr><td colspan="3" class="empty-state">Belum ada log input atau hapus.</td></tr>';
+                return;
+            }
+
+            activityLogs.forEach(log => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${log.waktu}</td>
+                    <td><strong>${log.aktivitas}</strong></td>
+                    <td>${log.perangkat || '-'}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // --- INISIALISASI DROPDOWN BULAN + TAHUN ---
+        function initBulanOptions() {
+            bulanSelectInput.innerHTML = '<option value="">-- Pilih Bulan --</option>';
+            BULAN_DENGAN_TAHUN.forEach(b => {
+                const opt = document.createElement('option');
+                opt.value = b;
+                opt.textContent = b;
+                bulanSelectInput.appendChild(opt);
+            });
+
+            const filterBuku = document.getElementById('filterBulanPembukuan');
+            filterBuku.innerHTML = '<option value="ALL">Semua Bulan (Keseluruhan)</option>';
+            BULAN_DENGAN_TAHUN.forEach(b => {
+                const opt = document.createElement('option');
+                opt.value = b;
+                opt.textContent = b;
+                filterBuku.appendChild(opt);
+            });
+        }
+
+        function syncFilterOperatorOptions() {
+            const filterOpSelect = document.getElementById('filterOperatorPembukuan');
+            if (!filterOpSelect) return;
+
+            const currentSelected = filterOpSelect.value || 'ALL';
+            const opSet = new Set(DAFTAR_OPERATOR);
+
+            dataPembayaran.forEach(item => {
+                if (item.operator && String(item.operator).trim()) {
+                    opSet.add(normalizeOperatorName(item.operator));
+                }
+            });
+
+            filterOpSelect.innerHTML = '<option value="ALL">Semua Operator</option>';
+            opSet.forEach(op => {
+                const opt = document.createElement('option');
+                opt.value = op;
+                opt.textContent = op;
+                filterOpSelect.appendChild(opt);
+            });
+
+            if (Array.from(opSet).includes(currentSelected)) {
+                filterOpSelect.value = currentSelected;
+            } else {
+                filterOpSelect.value = 'ALL';
+            }
+        }
+
+        function setBulanStandby() {
+            const bulanIni = BULAN_DENGAN_TAHUN[new Date().getMonth()];
+            bulanSelectInput.value = bulanIni;
+        }
+
+        // --- NAVIGASI & HISTORY GUARD (ANTI LONCAT KE GITHUB) ---
+        function seedDashboardHistoryGuard() {
+            history.replaceState({ view: 'view-dashboard', guard: 1 }, '', '#dashboard');
+            history.pushState({ view: 'view-dashboard', guard: 2 }, '', '#dashboard');
+        }
+
+        function getActiveViewId() {
+            const active = document.querySelector('.section-view.active');
+            return active ? active.id : 'view-dashboard';
+        }
+
+        function applyViewState(viewId, pushToHistory = true) {
+            if (viewId === 'view-pembukuan' && !pembukuanUnlocked) {
+                const inputSandi = prompt("Masukkan sandi untuk mengakses Pembukuan:");
+                if (inputSandi !== "123") {
+                    if (inputSandi !== null) {
+                        alert("Sandi salah! Akses ditolak.");
+                    }
+                    if (!pushToHistory) {
+                        seedDashboardHistoryGuard();
+                    }
+                    return;
+                }
+                pembukuanUnlocked = true;
+            }
+
+            document.querySelectorAll('.section-view').forEach(el => el.classList.remove('active'));
+            const targetEl = document.getElementById(viewId) || document.getElementById('view-dashboard');
+            targetEl.classList.add('active');
+
+            if (targetEl.id === 'view-dashboard') {
+                document.body.classList.add('dashboard-locked');
+                if (!pushToHistory) {
+                    seedDashboardHistoryGuard();
+                }
+            } else {
+                document.body.classList.remove('dashboard-locked');
+                if (targetEl.id === 'view-pembukuan') {
+                    syncFilterOperatorOptions();
+                    renderPembukuan();
+                    renderTabelUtama();
+                } else if (targetEl.id === 'view-riwayat') {
+                    handleSearchRiwayat();
+                    renderActivityLogs();
+                } else if (targetEl.id === 'view-pembayaran') {
+                    loadSavedOperator();
+                }
+                if (pushToHistory && !isHandlingPopState) {
+                    history.pushState({ view: targetEl.id }, '', `#${targetEl.id.replace('view-', '')}`);
+                }
+            }
+
+            window.scrollTo(0, 0);
+        }
+
+        function openMenu(viewId) {
+            applyViewState(viewId, true);
+        }
+
+        window.addEventListener('popstate', function() {
+            if (isHandlingPopState) return;
+            isHandlingPopState = true;
+
+            const currentView = getActiveViewId();
+            if (currentView !== 'view-dashboard') {
+                applyViewState('view-dashboard', false);
+                isHandlingPopState = false;
+                return;
+            }
+
+            seedDashboardHistoryGuard();
+
+            const keluar = confirm("Apakah Anda yakin ingin meninggalkan web ini?");
+            if (keluar) {
+                window.open('', '_self');
+                window.close();
+                location.replace('about:blank');
+            }
+
+            isHandlingPopState = false;
+        });
+
+        // --- INISIALISASI & MUAT DATA DARI SUPABASE ---
+        async function loadAllDataFromSupabase() {
+            try {
+                const { data: resMaster, error: errMaster } = await db
+                    .from('master_pelanggan')
+                    .select('*')
+                    .order('nama', { ascending: true });
+
+                if (errMaster) throw errMaster;
+                masterPelanggan = resMaster || [];
+
+                const { data: resBayar, error: errBayar } = await db
+                    .from('pembayaran')
+                    .select('*')
+                    .order('id', { ascending: false });
+
+                if (errBayar) throw errBayar;
+                dataPembayaran = resBayar || [];
+
+                try {
+                    const { data: resLogs, error: errLogs } = await db
+                        .from('activity_logs')
+                        .select('*')
+                        .order('id', { ascending: false })
+                        .limit(50);
+
+                    if (!errLogs && Array.isArray(resLogs) && resLogs.length > 0) {
+                        const filteredDbLogs = resLogs.filter(l => {
+                            const act = (l.aktivitas || '').toLowerCase();
+                            return act.includes('input') || act.includes('tambah') || act.includes('hapus');
+                        });
+                        if (filteredDbLogs.length > 0) {
+                            activityLogs = filteredDbLogs;
+                            saveLocalLogs();
+                        }
+                    }
+                } catch (e) {}
+
+                dbStatusDot.className = 'db-status connected';
+                dbStatusText.textContent = '🟢 TERHUBUNG: SUPABASE (ARUS-KAS)';
+
+                syncFilterOperatorOptions();
+                renderMaster();
+                renderTable();
+                renderPembukuan();
+                renderTabelUtama();
+                renderActivityLogs();
+            } catch (err) {
+                console.error('Supabase Error:', err);
+                const pesanError = err && err.message ? err.message : 'GAGAL TERHUBUNG';
+                dbStatusDot.className = 'db-status error';
+                dbStatusText.textContent = '🔴 ' + pesanError;
+                masterTableBody.innerHTML = `<tr><td colspan="3" class="empty-state">Error: ${pesanError}</td></tr>`;
+                tableBody.innerHTML = `<tr><td colspan="5" class="empty-state">Error: ${pesanError}</td></tr>`;
+                renderActivityLogs();
+            }
+        }
+
+        function formatRupiah(angka) {
+            return 'Rp ' + Number(angka).toLocaleString('id-ID');
+        }
+
+        function formatTanggalSekarang() {
+            const now = new Date();
+            const dd = String(now.getDate()).padStart(2, '0');
+            const mm = String(now.getMonth() + 1).padStart(2, '0');
+            const yyyy = now.getFullYear();
+            return `${dd}/${mm}/${yyyy}`;
+        }
+
+        function normalizeBulanLabel(bulanStr) {
+            if (!bulanStr) return '';
+            const trimmed = String(bulanStr).trim();
+            if (BULAN_DENGAN_TAHUN.includes(trimmed)) return trimmed;
+            const foundIdx = NAMA_BULAN_MURNI.findIndex(b => b.toLowerCase() === trimmed.toLowerCase());
+            return foundIdx >= 0 ? BULAN_DENGAN_TAHUN[foundIdx] : trimmed;
+        }
+
+        // --- RENDER & CRUD MASTER PELANGGAN ---
+        function renderMaster(filteredList = null) {
+            masterTableBody.innerHTML = '';
+            pelangganDatalist.innerHTML = '';
+
+            const dataToRender = filteredList !== null ? filteredList : masterPelanggan;
+
+            if (masterPelanggan.length === 0) {
+                masterTableBody.innerHTML = '<tr><td colspan="3" class="empty-state">Belum ada data pelanggan.</td></tr>';
+            } else if (dataToRender.length === 0) {
+                masterTableBody.innerHTML = '<tr><td colspan="3" class="empty-state">Pencarian tidak ditemukan.</td></tr>';
+            }
+
+            dataToRender.forEach((item) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><strong>${item.nama}</strong></td>
+                    <td>${formatRupiah(item.tagihan)}</td>
+                    <td style="text-align: center;">
+                        <button class="btn-action-delete" onclick="hapusMaster(${item.id}, '${item.nama.replace(/'/g, "\\'")}')" title="Hapus Pelanggan">🗑️</button>
+                    </td>
+                `;
+                masterTableBody.appendChild(tr);
+            });
+
+            masterPelanggan.forEach((item) => {
+                const option = document.createElement('option');
+                option.value = item.nama;
+                pelangganDatalist.appendChild(option);
+            });
+
+            handleSearchRiwayat();
+            renderTabelUtama();
+        }
+
+        function filterMasterTable() {
+            const keyword = document.getElementById('searchMasterInput').value.trim().toLowerCase();
+            if (!keyword) {
+                renderMaster();
+                return;
+            }
+            const filtered = masterPelanggan.filter(p => p.nama.toLowerCase().includes(keyword));
+            renderMaster(filtered);
+        }
+
+        masterForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const nama = masterNamaInput.value.trim();
+            const tagihan = parseFloat(masterTagihanInput.value);
+            const btn = document.getElementById('btnSubmitMaster');
+
+            if (nama && !isNaN(tagihan)) {
+                const cekAda = masterPelanggan.some(p => p.nama.toLowerCase() === nama.toLowerCase());
+                if (cekAda) {
+                    alert('Nama pelanggan sudah ada di dalam master.');
+                    return;
+                }
+
+                btn.disabled = true;
+                btn.innerHTML = '<span>⏳</span> Menyimpan...';
+
+                const { data, error } = await db
+                    .from('master_pelanggan')
+                    .insert([{ nama, tagihan }])
+                    .select();
+
+                btn.disabled = false;
+                btn.innerHTML = '<span>➕</span> Tambah Pelanggan';
+
+                if (error) {
+                    alert('Gagal menyimpan pelanggan: ' + error.message);
+                    return;
+                }
+
+                if (data && data.length > 0) {
+                    masterPelanggan.push(data[0]);
+                    masterPelanggan.sort((a, b) => a.nama.localeCompare(b.nama));
+                    masterNamaInput.value = '';
+                    masterTagihanInput.value = '';
+                    renderMaster();
+                    recordInputOrDeleteActivity(`Tambah pelanggan: ${nama}`);
+                }
+            }
+        });
+
+        bulkMasterForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const bulkText = document.getElementById('bulkMasterText').value.trim();
+            if (!bulkText) return;
+
+            const lines = bulkText.split(/\r?\n/);
+            const newRecords = [];
+
+            lines.forEach(line => {
+                let parts = line.includes('\t') ? line.split('\t') : (line.includes(';') ? line.split(';') : line.split(','));
+                if (parts.length >= 2) {
+                    const nama = parts[0].trim();
+                    const bersihNominal = String(parts[1]).replace(/[^0-9]/g, '');
+                    const tagihan = parseFloat(bersihNominal);
+
+                    if (nama && !isNaN(tagihan) && tagihan > 0) {
+                        const cekAda = masterPelanggan.some(p => p.nama.toLowerCase() === nama.toLowerCase()) ||
+                                       newRecords.some(p => p.nama.toLowerCase() === nama.toLowerCase());
+                        if (!cekAda) {
+                            newRecords.push({ nama, tagihan });
+                        }
+                    }
+                }
+            });
+
+            if (newRecords.length === 0) {
+                alert('Format tidak valid atau semua pelanggan sudah ada. Gunakan format: Nama, Tagihan (per baris)');
+                return;
+            }
+
+            const btn = document.getElementById('btnSubmitBulk');
+            btn.disabled = true;
+            btn.innerHTML = '<span>⏳</span> Menyimpan ke Supabase...';
+
+            const { data, error } = await db
+                .from('master_pelanggan')
+                .insert(newRecords)
+                .select();
+
+            btn.disabled = false;
+            btn.innerHTML = '<span>📥</span> Proses Tambah Banyak Data';
+
+            if (error) {
+                alert('Gagal menyimpan data massal: ' + error.message);
+                return;
+            }
+
+            if (data) {
+                masterPelanggan = [...masterPelanggan, ...data].sort((a, b) => a.nama.localeCompare(b.nama));
+                document.getElementById('bulkMasterText').value = '';
+                renderMaster();
+                recordInputOrDeleteActivity(`Tambah ${data.length} pelanggan massal`);
+                alert(`Berhasil menambahkan ${data.length} pelanggan baru ke database.`);
+            }
+        });
+
+        async function hapusMaster(id, namaPelanggan = '') {
+            const sandiInput = prompt("Masukkan sandi untuk menghapus pelanggan ini:");
+            if (sandiInput === "123") {
+                const { error } = await db
+                    .from('master_pelanggan')
+                    .delete()
+                    .eq('id', id);
+
+                if (error) {
+                    alert('Gagal menghapus pelanggan: ' + error.message);
+                    return;
+                }
+
+                masterPelanggan = masterPelanggan.filter(item => item.id !== id);
+                renderMaster();
+                recordInputOrDeleteActivity(`Hapus pelanggan: ${namaPelanggan || '#' + id}`);
+                alert("Pelanggan berhasil dihapus dari database.");
+            } else if (sandiInput !== null) {
+                alert("Sandi salah! Penghapusan dibatalkan.");
+            }
+        }
+
+        // --- SARAN & VALIDASI KETAT MASTER PELANGGAN DI INPUT PEMBAYARAN ---
+        function findMasterPelangganByName(inputName) {
+            if (!inputName) return null;
+            const trimmed = inputName.trim().toLowerCase();
+            return masterPelanggan.find(p => p.nama.trim().toLowerCase() === trimmed) || null;
+        }
+
+        function updateMasterValidationHint(rawVal) {
+            const trimmed = rawVal.trim();
+            if (!trimmed) {
+                masterStatusHint.textContent = '';
+                masterStatusHint.className = 'master-hint';
+                return;
+            }
+
+            const exactMatch = findMasterPelangganByName(trimmed);
+            if (exactMatch) {
+                masterStatusHint.textContent = `✅ Terdaftar di Master • Tagihan standar: ${formatRupiah(exactMatch.tagihan)}`;
+                masterStatusHint.className = 'master-hint valid';
+            } else {
+                masterStatusHint.textContent = '⚠️ Nama harus dipilih dari daftar saran Master Pelanggan.';
+                masterStatusHint.className = 'master-hint invalid';
+            }
+        }
+
+        function showPelangganSuggestions(keyword = '') {
+            const kw = keyword.trim().toLowerCase();
+            pelangganSuggestions.innerHTML = '';
+
+            if (masterPelanggan.length === 0) {
+                pelangganSuggestions.innerHTML = '<div class="suggestion-empty">Data Master Pelanggan masih kosong. Tambahkan pelanggan di menu Master terlebih dahulu.</div>';
+                pelangganSuggestions.classList.add('show');
+                return;
+            }
+
+            const matches = kw
+                ? masterPelanggan.filter(p => p.nama.toLowerCase().includes(kw))
+                : masterPelanggan;
+
+            if (matches.length === 0) {
+                pelangganSuggestions.innerHTML = '<div class="suggestion-empty">❌ Nama tidak ditemukan di Master Pelanggan.</div>';
+                pelangganSuggestions.classList.add('show');
+                return;
+            }
+
+            matches.slice(0, 30).forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'suggestion-item';
+                div.innerHTML = `
+                    <span><strong>${item.nama}</strong></span>
+                    <span class="suggestion-tagihan">${formatRupiah(item.tagihan)}</span>
+                `;
+                div.addEventListener('mousedown', function(e) {
+                    e.preventDefault();
+                    namaBayarInput.value = item.nama;
+                    jumlahBayarInput.value = item.tagihan;
+                    updateMasterValidationHint(item.nama);
+                    pelangganSuggestions.classList.remove('show');
+                });
+                pelangganSuggestions.appendChild(div);
+            });
+
+            pelangganSuggestions.classList.add('show');
+        }
+
+        namaBayarInput.addEventListener('focus', function() {
+            showPelangganSuggestions(this.value);
+        });
+
+        namaBayarInput.addEventListener('input', function() {
+            const val = this.value;
+            showPelangganSuggestions(val);
+            updateMasterValidationHint(val);
+
+            const found = findMasterPelangganByName(val);
+            if (found) {
+                jumlahBayarInput.value = found.tagihan;
+            }
+        });
+
+        namaBayarInput.addEventListener('blur', function() {
+            setTimeout(() => {
+                pelangganSuggestions.classList.remove('show');
+            }, 150);
+        });
+
+        // --- RENDER & CRUD PEMBAYARAN ---
+        function renderTable() {
+            tableBody.innerHTML = '';
+
+            if (dataPembayaran.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="5" class="empty-state">Belum ada data pembayaran.</td></tr>';
+                handleSearchRiwayat();
+                return;
+            }
+
+            dataPembayaran.forEach((item) => {
+                const bulanTampil = normalizeBulanLabel(item.bulan);
+                const operatorTampil = item.operator ? normalizeOperatorName(item.operator) : '-';
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><strong>${item.nama}</strong></td>
+                    <td>${bulanTampil}</td>
+                    <td>${formatRupiah(item.jumlah)}</td>
+                    <td><span class="op-badge">${operatorTampil}</span></td>
+                    <td style="text-align: center;">
+                        <button class="btn-action-delete" onclick="hapusData(${item.id}, '${item.nama.replace(/'/g, "\\'")}', '${bulanTampil.replace(/'/g, "\\'")}')" title="Hapus Data">🗑️</button>
+                    </td>
+                `;
+                tableBody.appendChild(tr);
+            });
+
+            handleSearchRiwayat();
+        }
+
+        form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const operator = normalizeOperatorName(operatorInput.value);
+            const rawNama = namaBayarInput.value.trim();
+            const bulan = bulanSelectInput.value.trim();
+            const rawJumlah = jumlahBayarInput.value.trim();
+            const jumlah = parseFloat(rawJumlah);
+            const tanggal = formatTanggalSekarang();
+            const btn = document.getElementById('btnSubmitPayment');
+
+            // 1. Validasi semua kolom wajib diisi
+            if (!operator || !DAFTAR_OPERATOR.includes(operator)) {
+                alert('Silakan pilih nama Operator (Amar atau Kori) terlebih dahulu!');
+                operatorInput.focus();
+                return;
+            }
+
+            if (!rawNama) {
+                alert('Nama Pelanggan wajib diisi!');
+                namaBayarInput.focus();
+                return;
+            }
+
+            if (!bulan) {
+                alert('Tagihan Bulan wajib dipilih!');
+                bulanSelectInput.focus();
+                return;
+            }
+
+            if (!rawJumlah || isNaN(jumlah) || jumlah <= 0) {
+                alert('Jumlah Pembayaran wajib diisi dengan nominal yang valid!');
+                jumlahBayarInput.focus();
+                return;
+            }
+
+            // 2. Validasi ketat: Nama pelanggan HARUS ada di Master Pelanggan
+            const matchedMaster = findMasterPelangganByName(rawNama);
+            if (!matchedMaster) {
+                alert(`Gagal menyimpan! Nama "${rawNama}" tidak terdaftar di Master Pelanggan.\n\nSilakan pilih nama pelanggan yang tersedia dari saran Master Pelanggan.`);
+                namaBayarInput.focus();
+                showPelangganSuggestions(rawNama);
+                return;
+            }
+
+            // Gunakan penulisan nama resmi sesuai Master Pelanggan
+            const namaResmi = matchedMaster.nama;
+
+            saveOperatorName(operator);
+            btn.disabled = true;
+            btn.innerHTML = '<span>⏳</span> Menyimpan...';
+
+            const payloadBayar = { tanggal, nama: namaResmi, bulan, jumlah, operator };
+            let { data: insertedPay, error: errPay } = await db
+                .from('pembayaran')
+                .insert([payloadBayar])
+                .select();
+
+            if (errPay && /operator/i.test(errPay.message)) {
+                const retry = await db
+                    .from('pembayaran')
+                    .insert([{ tanggal, nama: namaResmi, bulan, jumlah }])
+                    .select();
+                insertedPay = retry.data;
+                errPay = retry.error;
+            }
+
+            btn.disabled = false;
+            btn.innerHTML = '<span>💾</span> Simpan Pembayaran';
+
+            if (errPay) {
+                alert('Gagal menyimpan pembayaran: ' + errPay.message);
+                return;
+            }
+
+            if (insertedPay && insertedPay.length > 0) {
+                const savedRow = { ...insertedPay[0], operator: insertedPay[0].operator || operator };
+                dataPembayaran.unshift(savedRow);
+            }
+
+            syncFilterOperatorOptions();
+            renderTable();
+            renderPembukuan();
+            renderTabelUtama();
+            recordInputOrDeleteActivity(`Input bayar ${namaResmi} (${bulan}) oleh ${operator}`);
+
+            // Reset input transaksi tapi pertahankan Operator terakhir & Bulan standby
+            namaBayarInput.value = '';
+            jumlahBayarInput.value = '';
+            masterStatusHint.textContent = '';
+            masterStatusHint.className = 'master-hint';
+            pelangganSuggestions.classList.remove('show');
+            operatorInput.value = operator;
+            setBulanStandby();
+            namaBayarInput.focus();
+        });
+
+        async function hapusData(id, nama = '', bulan = '') {
+            const sandiInput = prompt("Masukkan sandi untuk menghapus catatan pembayaran ini:");
+            if (sandiInput === "123") {
+                const { error } = await db
+                    .from('pembayaran')
+                    .delete()
+                    .eq('id', id);
+
+                if (error) {
+                    alert('Gagal menghapus data pembayaran: ' + error.message);
+                    return;
+                }
+
+                dataPembayaran = dataPembayaran.filter(item => item.id !== id);
+                syncFilterOperatorOptions();
+                renderTable();
+                renderPembukuan();
+                renderTabelUtama();
+                recordInputOrDeleteActivity(`Hapus bayar ${nama} (${bulan})`);
+                alert("Data pembayaran berhasil dihapus dari database.");
+            } else if (sandiInput !== null) {
+                alert("Sandi salah! Penghapusan dibatalkan.");
+            }
+        }
+
+        // --- CEK RIWAYAT ---
+        function handleSearchRiwayat() {
+            const namaCari = document.getElementById('searchRiwayatNama').value.trim();
+            const hasilCard = document.getElementById('hasilRiwayatCard');
+            const tbody = document.getElementById('riwayatBulanTableBody');
+            const judul = document.getElementById('judulRiwayatPelanggan');
+
+            if (!namaCari) {
+                hasilCard.style.display = 'none';
+                return;
+            }
+
+            hasilCard.style.display = 'block';
+            judul.textContent = `Riwayat: ${namaCari}`;
+            tbody.innerHTML = '';
+
+            const bayarPelanggan = dataPembayaran.filter(p => p.nama.toLowerCase() === namaCari.toLowerCase());
+
+            BULAN_DENGAN_TAHUN.forEach((bulanLabel, idx) => {
+                const bulanPendek = NAMA_BULAN_MURNI[idx];
+                const record = bayarPelanggan.find(p => {
+                    const norm = normalizeBulanLabel(p.bulan).toLowerCase();
+                    return norm === bulanLabel.toLowerCase() || p.bulan.toLowerCase() === bulanPendek.toLowerCase();
+                });
+
+                const tr = document.createElement('tr');
+                if (record) {
+                    tr.innerHTML = `
+                        <td><strong>${bulanLabel}</strong></td>
+                        <td>${formatRupiah(record.jumlah)}</td>
+                        <td><span class="status-pill status-normal">✅ Lunas</span></td>
+                    `;
+                } else {
+                    tr.innerHTML = `
+                        <td><strong>${bulanLabel}</strong></td>
+                        <td>Rp 0</td>
+                        <td><span class="status-pill status-kendala">❌ Belum</span></td>
+                    `;
+                }
+                tbody.appendChild(tr);
+            });
+        }
+
+        // --- PEMBUKUAN, TABEL UTAMA & EXPORT EXCEL ---
+        function switchBukuTab(tab) {
+            const btnRekap = document.getElementById('tabBukuRekap');
+            const btnUtama = document.getElementById('tabBukuUtama');
+            const panelRekap = document.getElementById('buku-panel-rekap');
+            const panelUtama = document.getElementById('buku-panel-utama');
+
+            if (tab === 'utama') {
+                btnRekap.classList.remove('active');
+                btnUtama.classList.add('active');
+                panelRekap.style.display = 'none';
+                panelUtama.style.display = 'block';
+                renderTabelUtama();
+            } else {
+                btnUtama.classList.remove('active');
+                btnRekap.classList.add('active');
+                panelUtama.style.display = 'none';
+                panelRekap.style.display = 'block';
+                renderPembukuan();
+            }
+        }
+
+        function getFilteredPembukuan() {
+            const filterBulan = document.getElementById('filterBulanPembukuan').value;
+            const filterOperator = document.getElementById('filterOperatorPembukuan').value;
+
+            return dataPembayaran.filter(p => {
+                const matchBulan = filterBulan === 'ALL' ||
+                    normalizeBulanLabel(p.bulan).toLowerCase() === filterBulan.toLowerCase();
+
+                const opItem = normalizeOperatorName(p.operator || '');
+                const matchOperator = filterOperator === 'ALL' ||
+                    opItem.toLowerCase() === filterOperator.toLowerCase();
+
+                return matchBulan && matchOperator;
+            });
+        }
+
+        function renderPembukuan() {
+            const bukuTableBody = document.getElementById('bukuTableBody');
+            const bukuTotalKas = document.getElementById('bukuTotalKas');
+            const bukuSubTitle = document.getElementById('bukuSubTitle');
+            const filterBulan = document.getElementById('filterBulanPembukuan').value;
+            const filterOperator = document.getElementById('filterOperatorPembukuan').value;
+
+            bukuTableBody.innerHTML = '';
+            const filteredData = getFilteredPembukuan();
+
+            const labelBulan = filterBulan === 'ALL' ? 'semua bulan' : filterBulan;
+            const labelOperator = filterOperator === 'ALL' ? 'semua operator' : `operator ${filterOperator}`;
+            bukuSubTitle.textContent = `Akumulasi ${labelBulan} (${labelOperator})`;
+
+            if (filteredData.length === 0) {
+                bukuTableBody.innerHTML = `<tr><td colspan="5" class="empty-state">Tidak ada transaksi untuk ${labelBulan} (${labelOperator}).</td></tr>`;
+                bukuTotalKas.textContent = formatRupiah(0);
+                return;
+            }
+
+            let totalKas = 0;
+
+            filteredData.forEach(item => {
+                totalKas += Number(item.jumlah);
+                const tglTampil = item.tanggal || formatTanggalSekarang();
+                const bulanTampil = normalizeBulanLabel(item.bulan);
+                const operatorTampil = item.operator ? normalizeOperatorName(item.operator) : '-';
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${tglTampil}</td>
+                    <td><strong>${item.nama}</strong></td>
+                    <td>${bulanTampil}</td>
+                    <td><span class="op-badge">${operatorTampil}</span></td>
+                    <td><strong>${formatRupiah(item.jumlah)}</strong></td>
+                `;
+                bukuTableBody.appendChild(tr);
+            });
+
+            bukuTotalKas.textContent = formatRupiah(totalKas);
+        }
+
+        function getTabelUtamaRows() {
+            const keyword = (document.getElementById('searchTabelUtamaInput')?.value || '').trim().toLowerCase();
+
+            const mapPelanggan = new Map();
+            masterPelanggan.forEach(p => {
+                mapPelanggan.set(p.nama.toLowerCase(), {
+                    nama: p.nama,
+                    tagihan: Number(p.tagihan) || 0
+                });
+            });
+
+            dataPembayaran.forEach(pay => {
+                const key = pay.nama.toLowerCase();
+                if (!mapPelanggan.has(key)) {
+                    mapPelanggan.set(key, {
+                        nama: pay.nama,
+                        tagihan: Number(pay.jumlah) || 0
+                    });
+                }
+            });
+
+            let rows = Array.from(mapPelanggan.values()).sort((a, b) => a.nama.localeCompare(b.nama));
+            if (keyword) {
+                rows = rows.filter(r => r.nama.toLowerCase().includes(keyword));
+            }
+
+            return rows.map(pel => {
+                const bayarUser = dataPembayaran.filter(p => p.nama.toLowerCase() === pel.nama.toLowerCase());
+                const statusBulan = {};
+
+                NAMA_BULAN_MURNI.forEach((bPendek, idx) => {
+                    const bPenuh = BULAN_DENGAN_TAHUN[idx];
+                    const lunas = bayarUser.some(p => {
+                        const norm = normalizeBulanLabel(p.bulan).toLowerCase();
+                        return norm === bPenuh.toLowerCase() || p.bulan.toLowerCase() === bPendek.toLowerCase();
+                    });
+                    statusBulan[bPendek] = lunas ? 'Lunas' : 'Belum Lunas';
+                });
+
+                return {
+                    nama: pel.nama,
+                    tagihan: pel.tagihan,
+                    statusBulan
+                };
+            });
+        }
+
+        function renderTabelUtama() {
+            const headRow = document.getElementById('tabelUtamaHeadRow');
+            const body = document.getElementById('tabelUtamaBody');
+            if (!headRow || !body) return;
+
+            headRow.innerHTML = `
+                <th style="width: 15%;">Nama</th>
+                <th style="width: 13%;">Tagihan</th>
+                ${BULAN_SINGKAT.map(b => `<th style="width: 6%;">${b}</th>`).join('')}
+            `;
+
+            const rows = getTabelUtamaRows();
+            body.innerHTML = '';
+
+            if (!rows.length) {
+                body.innerHTML = `<tr><td colspan="${2 + NAMA_BULAN_MURNI.length}" class="empty-state">Belum ada data pada Tabel Utama.</td></tr>`;
+                return;
+            }
+
+            rows.forEach(r => {
+                const bulanCells = NAMA_BULAN_MURNI.map(b => {
+                    const isLunas = r.statusBulan[b] === 'Lunas';
+                    const badgeClass = isLunas ? 'status-normal' : 'status-kendala';
+                    const label = isLunas ? '✓' : '✕';
+                    return `<td><span class="status-pill ${badgeClass}">${label}</span></td>`;
+                }).join('');
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><strong>${r.nama}</strong></td>
+                    <td>${Number(r.tagihan).toLocaleString('id-ID')}</td>
+                    ${bulanCells}
+                `;
+                body.appendChild(tr);
+            });
+        }
+
+        function exportPembukuanExcel() {
+            const filteredData = getFilteredPembukuan();
+            const filterBulan = document.getElementById('filterBulanPembukuan').value;
+            const filterOperator = document.getElementById('filterOperatorPembukuan').value;
+
+            if (filteredData.length === 0) {
+                alert('Tidak ada data pembukuan sesuai filter yang dipilih untuk diexport.');
+                return;
+            }
+
+            const rows = filteredData.map((item, idx) => ({
+                'No': idx + 1,
+                'Tgl': item.tanggal || formatTanggalSekarang(),
+                'Nama': item.nama,
+                'Bulan': normalizeBulanLabel(item.bulan),
+                'Operator': item.operator ? normalizeOperatorName(item.operator) : '-',
+                'Jumlah Transaksi (Rp)': Number(item.jumlah)
+            }));
+
+            const totalJumlah = filteredData.reduce((sum, item) => sum + Number(item.jumlah), 0);
+            rows.push({
+                'No': '',
+                'Tgl': '',
+                'Nama': 'TOTAL',
+                'Bulan': filterBulan === 'ALL' ? 'Semua Bulan' : filterBulan,
+                'Operator': filterOperator === 'ALL' ? 'Semua Operator' : filterOperator,
+                'Jumlah Transaksi (Rp)': totalJumlah
+            });
+
+            const bagianBulan = filterBulan === 'ALL' ? 'Semua_Bulan' : filterBulan.replace(/\s+/g, '_');
+            const bagianOperator = filterOperator === 'ALL' ? 'Semua_Operator' : `Operator_${filterOperator.replace(/\s+/g, '_')}`;
+            const namaFile = `Rekapitulasi_Pembukuan_${bagianBulan}_${bagianOperator}.xlsx`;
+
+            if (typeof XLSX !== 'undefined') {
+                const worksheet = XLSX.utils.json_to_sheet(rows);
+                const workbook = XLSX.utils.book_new();
+                const namaSheet = `${filterBulan === 'ALL' ? 'Semua' : filterBulan}_${filterOperator === 'ALL' ? 'AllOp' : filterOperator}`.slice(0, 31);
+                XLSX.utils.book_append_sheet(workbook, worksheet, namaSheet);
+                XLSX.writeFile(workbook, namaFile);
+            }
+        }
+
+        function exportTabelUtamaExcel() {
+            const rows = getTabelUtamaRows();
+            if (!rows.length) {
+                alert('Tidak ada data pada Tabel Utama untuk diexport.');
+                return;
+            }
+
+            const excelRows = rows.map(r => {
+                const obj = {
+                    'Nama': r.nama,
+                    'Tagihan (Rp)': r.tagihan
+                };
+                NAMA_BULAN_MURNI.forEach(b => {
+                    obj[b] = r.statusBulan[b];
+                });
+                return obj;
+            });
+
+            if (typeof XLSX !== 'undefined') {
+                const worksheet = XLSX.utils.json_to_sheet(excelRows);
+                const workbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(workbook, worksheet, 'Tabel Utama');
+                XLSX.writeFile(workbook, `Tabel_Utama_${TAHUN_SEKARANG}.xlsx`);
+            }
+        }
+
+        // Jalankan saat halaman dibuka
+        loadLocalLogs();
+        loadSavedOperator();
+        initBulanOptions();
+        setBulanStandby();
+        seedDashboardHistoryGuard();
+        loadAllDataFromSupabase();
+    </script>
+</body>
+</html>
